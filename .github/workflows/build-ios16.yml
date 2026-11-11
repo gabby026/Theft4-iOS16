@@ -27,20 +27,49 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 180
     steps:
-      - name: Checkout Theft4
+      - name: Checkout Theft4 source
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           fetch-depth: 1
 
-      - name: Checkout XeniOS dependency
+      - name: Prepare pinned Theft4 dependencies
+        run: python3 tools/setup_repo.py --jobs 12
+
+      - name: Checkout XeniOS source
         uses: actions/checkout@v4
         with:
           repository: xenios-jp/XeniOS
           ref: xenios
           path: XeniOS
-          submodules: recursive
+          submodules: false
           fetch-depth: 1
+
+      - name: Prepare XeniOS submodules in parallel
+        run: |
+          git -C XeniOS submodule sync --recursive
+          git -C XeniOS submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive
+
+      - name: Lower XeniOS dependency deployment target
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("XeniOS/CMakeLists.txt")
+          source = path.read_text()
+          original = source
+          source = source.replace(
+              'set(CMAKE_OSX_DEPLOYMENT_TARGET "26.0" CACHE STRING "Minimum iOS version")',
+              'set(CMAKE_OSX_DEPLOYMENT_TARGET "16.3" CACHE STRING "Minimum iOS version")',
+          )
+          source = source.replace(
+              'if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 26.0)',
+              'if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 16.3)',
+          )
+          if source == original or "26.0" in source:
+              raise SystemExit("Could not safely lower XeniOS iOS minimum to 16.3")
+          path.write_text(source)
+          print("XeniOS MoltenVK archives will target iOS 16.3.")
+          PY
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -66,6 +95,7 @@ jobs:
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.3 \
             -DXENIA_ENABLE_IOS_MOLTENVK=ON
           cmake --build XeniOS/build-ios-xcode --config Release \
             --target MoltenVK MoltenVK_Common MoltenVK_ShaderConverter \
