@@ -27,7 +27,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 180
     steps:
-      - name: Checkout Theft4 source
+      - name: Checkout only the iOS source tree
         uses: actions/checkout@v4
         with:
           submodules: false
@@ -43,6 +43,7 @@ jobs:
             /ios/**
             /tests/ios/**
             /thirdparty/**
+            /third_party/**
             /tools/setup_repo.py
             /tools/build_ios_release.sh
             /tools/theft4_renderer_build_args.sh
@@ -50,9 +51,19 @@ jobs:
             /tools/XenosRecomp/**
 
       - name: Initialize only iOS build dependencies
+        shell: bash
         run: |
           mapfile -t sdk_modules < <(
-            git config -f .gitmodules --get-regexp '^submodule\\..*\\.path
+            git config -f .gitmodules --get-regexp '^submodule\..*\.path$' |
+              awk '$2 ~ /^glue\/rexglue-sdk-main\/thirdparty\// { print $2 }'
+          )
+          git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- "${sdk_modules[@]}"
+          git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- \
+            tools/XenosRecomp thirdparty/msdf-atlas-gen \
+            thirdparty/MoltenVK/MoltenVK thirdparty/MoltenVK/SPIRV-Cross \
+            thirdparty/json thirdparty/astc-encoder
+          python3 tools/setup_repo.py --prepare-only
+
       - name: Checkout XeniOS source
         uses: actions/checkout@v4
         with:
@@ -62,18 +73,19 @@ jobs:
           submodules: false
           fetch-depth: 1
 
-      - name: Prepare XeniOS submodules in parallel
+      - name: Initialize XeniOS build dependencies
+        shell: bash
         run: |
           git -C XeniOS submodule sync --recursive
           git -C XeniOS submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive
 
-      - name: Lower XeniOS dependency deployment target
+      - name: Set XeniOS deployment minimum to iOS 16.3
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           path = Path("XeniOS/CMakeLists.txt")
           source = path.read_text()
-          original = source
           source = source.replace(
               'set(CMAKE_OSX_DEPLOYMENT_TARGET "26.0" CACHE STRING "Minimum iOS version")',
               'set(CMAKE_OSX_DEPLOYMENT_TARGET "16.3" CACHE STRING "Minimum iOS version")',
@@ -82,10 +94,9 @@ jobs:
               'if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 26.0)',
               'if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 16.3)',
           )
-          if source == original or "26.0" in source:
-              raise SystemExit("Could not safely lower XeniOS iOS minimum to 16.3")
+          if "26.0" in source:
+              raise SystemExit("XeniOS still contains an iOS 26 deployment floor")
           path.write_text(source)
-          print("XeniOS MoltenVK archives will target iOS 16.3.")
           PY
 
       - name: Set up Python
@@ -122,95 +133,6 @@ jobs:
         env:
           THEFT4_RENDERER: vulkan
           THEFT4_LAB_BUILD: 'OFF'
-          THEFT4_MOLTENVK_IOS_LIB_DIR: ${{ github.workspace }}/XeniOS/build-ios-xcode/obj/iOS/Release
-          THEFT4_BUILD_JOBS: '6'
-        run: |
-          ./tools/build_ios_release.sh 0.3.2
-
-      - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: Theft4-iOS16-unsigned-${{ github.sha }}
-          path: dist/*.ipa
-          if-no-files-found: error
-          retention-days: 14
- |
-              awk '$2 ~ /^glue\\/rexglue-sdk-main\\/thirdparty\\// { print $2 }'
-          )
-          git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- "${sdk_modules[@]}"
-          git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- \
-            tools/XenosRecomp thirdparty/msdf-atlas-gen \
-            thirdparty/MoltenVK/MoltenVK thirdparty/MoltenVK/SPIRV-Cross
-          python3 tools/setup_repo.py --prepare-only
-
-      - name: Checkout XeniOS source
-        uses: actions/checkout@v4
-        with:
-          repository: xenios-jp/XeniOS
-          ref: xenios
-          path: XeniOS
-          submodules: false
-          fetch-depth: 1
-
-      - name: Prepare XeniOS submodules in parallel
-        run: |
-          git -C XeniOS submodule sync --recursive
-          git -C XeniOS submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive
-
-      - name: Lower XeniOS dependency deployment target
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path("XeniOS/CMakeLists.txt")
-          source = path.read_text()
-          original = source
-          source = source.replace(
-              'set(CMAKE_OSX_DEPLOYMENT_TARGET "26.0" CACHE STRING "Minimum iOS version")',
-              'set(CMAKE_OSX_DEPLOYMENT_TARGET "16.3" CACHE STRING "Minimum iOS version")',
-          )
-          source = source.replace(
-              'if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 26.0)',
-              'if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 16.3)',
-          )
-          if source == original or "26.0" in source:
-              raise SystemExit("Could not safely lower XeniOS iOS minimum to 16.3")
-          path.write_text(source)
-          print("XeniOS MoltenVK archives will target iOS 16.3.")
-          PY
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-
-      - name: Install build tools
-        run: brew install cmake ninja pkg-config llvm openssl@3 vulkan-loader
-
-      - name: Show toolchain
-        run: |
-          sw_vers
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
-          cmake --version
-
-      - name: Build iPhoneOS MoltenVK archives
-        run: |
-          cmake -S XeniOS -B XeniOS/build-ios-xcode -G Xcode \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.3 \
-            -DXENIA_ENABLE_IOS_MOLTENVK=ON
-          cmake --build XeniOS/build-ios-xcode --config Release \
-            --target MoltenVK MoltenVK_Common MoltenVK_ShaderConverter \
-                     spirv-cross SPIRV-Tools-static --parallel 6
-
-      - name: Build and package unsigned IPA for iOS 16.3+
-        env:
-          THEFT4_RENDERER: vulkan
           THEFT4_MOLTENVK_IOS_LIB_DIR: ${{ github.workspace }}/XeniOS/build-ios-xcode/obj/iOS/Release
           THEFT4_BUILD_JOBS: '6'
         run: |
