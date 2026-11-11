@@ -153,6 +153,14 @@ class NativeCommandQueue {
   size_t logical_size_ = 0;
 };
 
+// The non-Lab queue stores NativeCommand values directly rather than
+// NativeCommandPacket wrappers. Preserve the same access helper for both modes.
+template <typename Command>
+  requires (!requires(Command& command) { command.FullCommand(); })
+Command& NativeQueueCommand(Command& command) {
+  return command;
+}
+
 template <typename Full>
 Full& NativeQueueCommand(NativeCommandPacket<Full>& packet) {
   assert(packet.FullCommand()); return *packet.FullCommand();
