@@ -15,7 +15,7 @@ add_subdirectory("${REXSDK_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/rexglue-sdk")
 # The macOS consumer must package the workspace MoltenVK build.  The generic
 # RexGlue staging code still supplies the Vulkan loader and SDK support files,
 # but an installed MoltenVK may not contain the fixes carried by this tree.
-if(APPLE AND NOT TARGET MoltenVK)
+if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT TARGET MoltenVK)
     add_subdirectory(
         "${CMAKE_SOURCE_DIR}/thirdparty/MoltenVK"
         "${CMAKE_BINARY_DIR}/thirdparty/MoltenVK"
