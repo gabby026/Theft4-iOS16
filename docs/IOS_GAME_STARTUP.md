@@ -108,7 +108,7 @@ cmake --preset ios-device-debug \
   -DTHEFT4_ENABLE_GAME_STARTUP=ON \
   -DTHEFT4_SIGN_DEVICE=ON \
   -DLIBERTY_IOS_DEVELOPMENT_TEAM=YOUR_TEAM_ID \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=16.3
 cmake --build out/build/ios-device-debug --config Debug \
   --target Theft4 --parallel 6 -- -allowProvisioningUpdates
 ```
