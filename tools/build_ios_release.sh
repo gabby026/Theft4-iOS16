@@ -65,6 +65,7 @@ export PATH="${cmake_bin:h}:$PATH"
 print "Building Theft4 $version ($build_version) for public iOS sideloading"
 cmake_args=(
   --preset ios-device-release
+  -DCMAKE_SYSTEM_NAME=iOS
   -DREXGLUE_RUNTIME_ONLY=ON
   -DREXGLUE_HEADLESS_KERNEL=ON
   -DTHEFT4_BUILD_GAME_CODE=ON
