@@ -16,8 +16,10 @@ See [release status](THEFT4_0.3_MAIN_INTEGRATION.md),
 
 - macOS, full Xcode with its installed Metal compiler component, CMake 3.29+,
   Python 3.10+, and the repository's pinned submodules.
-- ARM64 iOS/iPadOS 26.0 or later and a development-enabled physical device for
-  local installation. A deployment minimum is not a performance guarantee.
+- ARM64 iOS/iPadOS 16.3 or later and a development-enabled physical device for
+  local installation. The 16.3 minimum covers floating-point `std::from_chars`;
+  older-OS API paths are guarded where identified. This is an experimental
+  compatibility target, not a claim that gameplay has been validated on iOS 16.
 - An Apple team/account for development signing, or a compatible sideloading
   tool for signing a public unsigned IPA.
 - The existing iPhoneOS Release archives: `libMoltenVK.a`,
@@ -72,9 +74,11 @@ The generator opens `out/build/ios-device-release/LibertyRecomp-ALL.xcodeproj`.
 Select Theft4, Release and the physical device. For normal play, uncheck **Run →
 Info → Debug executable**; keep Metal API/shader validation and GPU capture Off.
 The output is `out/build/ios-device-release/theft4/Release/Theft4.app`.
-The generator requests sustained execution by default, matching the tested M5
-profile; `THEFT4_SUSTAINED_EXECUTION=OFF` is available when comparing that setting
-or when the signing profile requires it. Game Mode is declared separately.
+The iOS 16 compatibility branch disables sustained execution by default because
+that scheduling capability is not available on iOS 16. It can be explicitly
+re-enabled with `THEFT4_SUSTAINED_EXECUTION=ON` only when building for a supported
+newer OS and signing configuration. Game Mode metadata is declared separately
+and may be ignored by older systems.
 Neither setting guarantees identical OS scheduling on every device.
 
 Install and open the launcher without attaching the debugger:
