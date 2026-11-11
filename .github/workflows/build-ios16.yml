@@ -86,7 +86,55 @@ jobs:
           while IFS= read -r module_path; do
             sdk_modules+=( "$module_path" )
           done < <(
-            git config -f .gitmodules --get-regexp '^submodule\\..*\\.path$' |
+            git config -f .gitmodules --get-regexp '^submodule\..*\.path |
+              awk '$2 ~ /^glue\/rexglue-sdk-main\/thirdparty\// { print $2 }'
+          )
+          if (( ${#sdk_modules[@]} > 0 )); then
+            git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- "${sdk_modules[@]}"
+          fi
+          git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- \
+            tools/XenosRecomp thirdparty/msdf-atlas-gen \
+            thirdparty/MoltenVK/SPIRV-Cross thirdparty/json
+          python3 tools/setup_repo.py --prepare-only
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          cmake --version
+          xcrun metal -v
+
+      - name: Build direct Metal shader exporters
+        run: |
+          cmake -S tools/direct-metal -B out/direct-metal/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/direct-metal/build --target metal_shader_export metal_host_shader_export --parallel 6
+
+      - name: Export and compile the complete iOS Metal shader libraries
+        run: |
+          out/direct-metal/build/metal_shader_export out/direct-metal/corpus
+          out/direct-metal/build/metal_host_shader_export out/direct-metal/host-corpus
+          python3 tools/direct-metal/compile_shaders.py out/direct-metal/corpus out/direct-metal/ios --platform ios --jobs 6
+          python3 tools/direct-metal/compile_shaders.py out/direct-metal/host-corpus out/direct-metal/ios/Host --platform ios --jobs 6
+
+      - name: Build and package unsigned IPA for iOS 16.3+
+        env:
+          THEFT4_RENDERER: metal
+          THEFT4_METAL_LIBRARIES: ${{ github.workspace }}/out/direct-metal/ios
+          THEFT4_METAL_HOST_LIBRARIES: ${{ github.workspace }}/out/direct-metal/ios/Host
+          THEFT4_LAB_BUILD: 'OFF'
+          THEFT4_BUILD_JOBS: '6'
+        run: |
+          ./tools/build_ios_release.sh 0.3.2
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Theft4-iOS16-unsigned-${{ github.sha }}
+          path: dist/*.ipa
+          if-no-files-found: error
+          retention-days: 14
+ |
               awk '$2 ~ /^glue\\/rexglue-sdk-main\\/thirdparty\\// { print $2 }'
           )
           if (( ${#sdk_modules[@]} > 0 )); then
