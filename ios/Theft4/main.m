@@ -38,14 +38,19 @@ extern int rex_gta4_native_profile_status(void);
 #endif
 
 static NSString *Theft4PerformanceProfileFields(void) {
-    NSProcessInfo *process = NSProcessInfo.processInfo;
-    BOOL standard = [process hasPerformanceProfile:NSProcessPerformanceProfileDefault];
-    BOOL sustained = [process hasPerformanceProfile:NSProcessPerformanceProfileSustained];
-    // Two false answers mean unknown, not proof of the default profile.
-    NSString *profile = standard && sustained ? @"both" : sustained ? @"sustained" :
-        standard ? @"default" : @"unknown";
-    return [NSString stringWithFormat:@"performance_profile=%@ profile_default=%d profile_sustained=%d",
-        profile, standard, sustained];
+    // Performance profiles were introduced after the iOS 16 deployment target.
+    // Keep diagnostics available on older devices without sending unsupported selectors.
+    if (@available(iOS 18.0, *)) {
+        NSProcessInfo *process = NSProcessInfo.processInfo;
+        BOOL standard = [process hasPerformanceProfile:NSProcessPerformanceProfileDefault];
+        BOOL sustained = [process hasPerformanceProfile:NSProcessPerformanceProfileSustained];
+        // Two false answers mean unknown, not proof of the default profile.
+        NSString *profile = standard && sustained ? @"both" : sustained ? @"sustained" :
+            standard ? @"default" : @"unknown";
+        return [NSString stringWithFormat:@"performance_profile=%@ profile_default=%d profile_sustained=%d",
+            profile, standard, sustained];
+    }
+    return @"performance_profile=unavailable profile_default=0 profile_sustained=0";
 }
 
 @interface Theft4MetalView : UIView
@@ -721,9 +726,11 @@ static void bootEvent(void *context, const char *event) {
 @implementation Theft4ViewController
 - (void)viewDidLoad {
     [super viewDidLoad];
-    [NSNotificationCenter.defaultCenter addObserver:self
-        selector:@selector(performanceProfileChanged:)
-        name:NSProcessInfoPerformanceProfileDidChangeNotification object:nil];
+    if (@available(iOS 18.0, *)) {
+        [NSNotificationCenter.defaultCenter addObserver:self
+            selector:@selector(performanceProfileChanged:)
+            name:NSProcessInfoPerformanceProfileDidChangeNotification object:nil];
+    }
     self.controllerUserInteractionEnabled = YES;
     _legacyIPadProfile = configureDeviceProfile();
     const char *deviceProfile = getenv("THEFT4_DEVICE_PROFILE") ?: "";
