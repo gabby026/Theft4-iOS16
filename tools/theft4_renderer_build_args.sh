@@ -30,5 +30,5 @@ renderer_source_revision="$(git rev-parse --short=8 HEAD 2>/dev/null || print de
 renderer_build_args+=(
   -DTHEFT4_NATIVE_METAL_CAPTURE=OFF
   -DTHEFT4_RENDER_SOURCE_REVISION="$renderer_source_revision"
-  -DTHEFT4_SUSTAINED_EXECUTION="${THEFT4_SUSTAINED_EXECUTION:-ON}"
+  -DTHEFT4_SUSTAINED_EXECUTION="${THEFT4_SUSTAINED_EXECUTION:-OFF}"
 )
