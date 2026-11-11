@@ -15,6 +15,17 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <type_traits>
+
+#if defined(__APPLE__) && defined(__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__) && \
+    __ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ < 260000
+#include <cerrno>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <locale.h>
+#include <xlocale.h>
+#endif
 
 #include <fmt/format.h>
 
@@ -60,6 +71,61 @@ inline T from_string(const std::string_view value, bool force_hex = false) {
 }
 
 namespace detail {
+
+#if defined(__APPLE__) && defined(__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__) && \
+    __ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ < 260000
+// Xcode 26's iOS SDK marks libc++'s floating-point from_chars overload as
+// iOS 26-only, even though Apple's C++ support table documents iOS 16.3.
+// Use the C-locale conversion functions for older iOS deployment targets.
+inline locale_t c_numeric_locale() {
+  static locale_t locale = newlocale(LC_NUMERIC_MASK, "C", nullptr);
+  return locale;
+}
+
+template <typename T>
+inline std::from_chars_result floating_from_chars(const char* first, const char* last,
+                                                   T& value) {
+  if (first == last || *first == '+' ||
+      std::isspace(static_cast<unsigned char>(*first))) {
+    return {first, std::errc::invalid_argument};
+  }
+  const locale_t locale = c_numeric_locale();
+  if (!locale) {
+    return {first, std::errc::invalid_argument};
+  }
+
+  const std::string input(first, last);
+  const char* input_begin = input.c_str();
+  char* parsed_end = nullptr;
+  errno = 0;
+  T parsed{};
+  if constexpr (std::is_same_v<T, float>) {
+    parsed = ::strtof_l(input_begin, &parsed_end, locale);
+  } else if constexpr (std::is_same_v<T, double>) {
+    parsed = ::strtod_l(input_begin, &parsed_end, locale);
+  } else {
+    static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
+                  "floating_from_chars supports float and double only");
+  }
+
+  if (parsed_end == input_begin) {
+    return {first, std::errc::invalid_argument};
+  }
+  if (errno == ERANGE && (parsed == T(0) || !std::isfinite(parsed))) {
+    return {first, std::errc::result_out_of_range};
+  }
+
+  const auto consumed = static_cast<size_t>(parsed_end - input_begin);
+  value = parsed;
+  return {first + consumed, std::errc{}};
+}
+#else
+template <typename T>
+inline std::from_chars_result floating_from_chars(const char* first, const char* last,
+                                                   T& value) {
+  return std::from_chars(first, last, value, std::chars_format::general);
+}
+#endif
 
 template <typename T, typename V = std::make_signed_t<T>>
 inline T make_negative(T value) {
@@ -133,8 +199,8 @@ inline T fpfs(const std::string_view value, bool force_hex) {
     }
     std::memcpy(&result, &pun, sizeof(PUN));
   } else {
-    auto [p, error] = std::from_chars(range.data(), range.data() + range.size(), result,
-                                      std::chars_format::general);
+    auto [p, error] = floating_from_chars(range.data(), range.data() + range.size(),
+                                          result);
     // TODO(gibbed): do something more with errors?
     if (error != std::errc()) {
       assert_always();
@@ -253,7 +319,7 @@ inline vec128_t from_string<vec128_t>(const std::string_view value, bool force_h
         assert_always();
         return vec128_t();
       }
-      auto result = std::from_chars(p, end, v.f32[i], std::chars_format::general);
+      auto result = detail::floating_from_chars(p, end, v.f32[i]);
       if (result.ec != std::errc()) {
         assert_always();
         return vec128_t();
