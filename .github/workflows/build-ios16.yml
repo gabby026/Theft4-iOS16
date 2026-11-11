@@ -53,15 +53,20 @@ jobs:
       - name: Initialize only iOS build dependencies
         shell: bash
         run: |
-          mapfile -t sdk_modules < <(
-            git config -f .gitmodules --get-regexp '^submodule\..*\.path$' |
-              awk '$2 ~ /^glue\/rexglue-sdk-main\/thirdparty\// { print $2 }'
+          sdk_modules=()
+          while IFS= read -r module_path; do
+            sdk_modules+=( "$module_path" )
+          done < <(
+            git config -f .gitmodules --get-regexp '^submodule\\..*\\.path$' |
+              awk '$2 ~ /^glue\\/rexglue-sdk-main\\/thirdparty\\// { print $2 }'
           )
-          git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- "${sdk_modules[@]}"
+          if (( ${#sdk_modules[@]} > 0 )); then
+            git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- "${sdk_modules[@]}"
+          fi
           git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- \
             tools/XenosRecomp thirdparty/msdf-atlas-gen \
             thirdparty/MoltenVK/MoltenVK thirdparty/MoltenVK/SPIRV-Cross \
-            thirdparty/json thirdparty/astc-encoder
+            thirdparty/json
           python3 tools/setup_repo.py --prepare-only
 
       - name: Checkout XeniOS source
