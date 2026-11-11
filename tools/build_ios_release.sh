@@ -92,7 +92,7 @@ print "Building Theft4 $version ($build_version) for public iOS sideloading"
   "${renderer_build_args[@]}" \
   -DTHEFT4_SIGN_DEVICE=OFF \
   -DTHEFT4_PUBLIC_BUILD=ON \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0 \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=16.3 \
   -DTHEFT4_XENIOS_IOS_LIB_DIR="$library_dir" \
   -DTHEFT4_XENIOS_GENERATED_SHADER_DIR="$shader_dir"
 "$cmake_bin" --build --preset theft4-device-release --parallel "$build_jobs"
