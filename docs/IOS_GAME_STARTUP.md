@@ -93,9 +93,11 @@ that a graphics/audio/input device exists. This guard behavior is limited to
 
 Host: macOS 27.0, Xcode 27.0 (27A266a), Apple Clang 21, CMake 4.4.3.
 Target: physical M5 iPad Pro, ARM64, iPadOS 27, Debug, development signed.
-The local development deployment minimum is **iOS 26**, because the linked
-kernel's floating-point `std::from_chars` is unavailable at the preset's original
-iOS 16 minimum. This is not a claim that the port supports every iOS 26 device.
+The initial local development target was raised to iOS 26 because the linked
+kernel's floating-point `std::from_chars` is unavailable at iOS 16.0. Apple's
+availability is iOS 16.3, so the `ios16-compat` branch tests a 16.3 deployment
+minimum and guards the known iOS 18 performance-profile APIs. This is a build
+compatibility experiment; an iPhone 11 boot and gameplay result are not yet proven.
 
 From the repository root, with CMake on PATH:
 
