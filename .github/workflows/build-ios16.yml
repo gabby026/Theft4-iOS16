@@ -83,12 +83,11 @@ jobs:
         shell: bash
         run: |
           sdk_modules=()
-          while IFS= read -r module_path; do
-            sdk_modules+=( "$module_path" )
-          done < <(
-            git config -f .gitmodules --get-regexp '^submodule\..*\.path |
-              awk '$2 ~ /^glue\/rexglue-sdk-main\/thirdparty\// { print $2 }'
-          )
+          while read -r module_key module_path; do
+            case "$module_path" in
+              glue/rexglue-sdk-main/thirdparty/*) sdk_modules+=( "$module_path" ) ;;
+            esac
+          done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
           if (( ${#sdk_modules[@]} > 0 )); then
             git submodule update --init --depth=1 --jobs "$(sysctl -n hw.ncpu)" --recursive -- "${sdk_modules[@]}"
           fi
