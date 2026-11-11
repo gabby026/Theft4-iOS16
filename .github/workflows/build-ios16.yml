@@ -61,6 +61,21 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
+      - name: Install Metal compiler toolchain
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if sudo xcodebuild -downloadComponent MetalToolchain; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              delay=$((attempt * 30))
+              echo "::warning::MetalToolchain download attempt $attempt failed; retrying in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          echo "::error::MetalToolchain download failed after 5 attempts"
+          exit 1
+
       - name: Install build tools
         run: brew install cmake ninja pkg-config llvm openssl@3
 
